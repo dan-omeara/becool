@@ -6,7 +6,7 @@ Weather app to determine coolest place in local area.
 Best suited for microclimates.
 TODO:
 --Issues with API accuracy. Switch to Open-Meteo (https://open-meteo.com/)
---Switch from zip-code setup to lat/long
+--Use zip code as initial user input, then query API with lat/long
 """
 
 # Used for debugging API responses
@@ -32,14 +32,27 @@ def main():
         print("There are " + str(len(nearby_zips))
               + " zip codes within a " + str(RADIUS) + " mile radius.")
         input("Press any key to continue.")
+        
         weather_results = get_weather(nearby_zips)
+
+        cleaned_results = clean_results(weather_results)
 
         # Used for debugging API responses
         # write_to_file(weather_results, filename = str(time.time()))
 
-        coolest_zip, cleaned_results = calculate_coolest_zip(weather_results, zip_code)
+        coolest_zip = calculate_coolest_zip(cleaned_results, zip_code)
         display_results(cleaned_results, zip_code, coolest_zip)
         print("")
+
+
+def get_lat_long(weather_results):
+    """
+    Pulls latitude and longitude from WeatherAPI's results
+    Parameters:
+    -Weather results by zipcode []
+    """
+    
+    
 
 
 def get_local_zips(zip_code, radius):
@@ -91,7 +104,11 @@ def get_weather(nearby_zips):
             "days" : "1",
             "key": API_KEY,
         }
-        response = requests.get(API_BASE_URL, params, timeout = 10, headers = h)
+        try:
+            response = requests.get(API_BASE_URL, params, timeout = 10, headers = h)
+        except requests.exceptions.RequestException as e: 
+            raise SystemExit(e)
+
 
         # For debugging API responses
         # write_to_file(response.json(), filename=(zip_code + ".json"))
@@ -100,14 +117,15 @@ def get_weather(nearby_zips):
 
     return weather_results_by_zip
 
-
-def calculate_coolest_zip(weather_results_by_zip, my_zip):
+def clean_results(weather_results_by_zip):
     """
-    Using the weather results by zip code, determines which nearby
-    zip code area has the coolest expected weather that day.
+    Cleans the weather results returned through the API, to help
+    with debugging and resolving any issues. Only retains the 6 relevant data points:
+    city name, 
     Parameters:
-    --Weather results by zip code [dict]
-    --User inputted zip code [string]
+    -API response by zip code [dict]
+    Returns:
+    -Cleaned results [dict]
     """
     cleaned_results = {}
 
@@ -121,12 +139,16 @@ def calculate_coolest_zip(weather_results_by_zip, my_zip):
             forecast_weather = weather_results_by_zip [zip_code]["forecast"]
 
             city_name = location['name']
+            lat = location['lat']
+            lon = location['lon']
             curr_temp = curr_weather['temp_f']
             avg_temp = forecast_weather["forecastday"][0]["day"]["avgtemp_f"]
             max_temp = forecast_weather["forecastday"][0]["day"]["maxtemp_f"]
 
             cleaned_results.update({zip_code: {
                 "city_name": city_name,
+                "lat": lat,
+                "lon": lon,
                 "curr_temp": curr_temp,
                 "avg_temp" : avg_temp, # not currently used, but useful for testing
                 "max_temp": max_temp,
@@ -134,23 +156,40 @@ def calculate_coolest_zip(weather_results_by_zip, my_zip):
 
     if not cleaned_results:
         print("Error. Zip codes not recognized by weather database.")
+        pass
 
     else:
-        # Set initial coolest_zip and coolest_max_temp to user's zipcode
-        coolest_zip = my_zip
-        coolest_max_temp = cleaned_results[coolest_zip]["max_temp"]
+        return cleaned_results
 
-        # Compare each zipcode's max_temp with the previous, and store if coolest
-        for zip_code in cleaned_results:
-            print ("Comparing to", zip_code, "where the max temperature today is",
-                   cleaned_results[zip_code]["max_temp"], "...")
-            if cleaned_results[zip_code]["max_temp"] < coolest_max_temp:
-                coolest_zip = zip_code
-                coolest_max_temp = cleaned_results[zip_code]["max_temp"]
+
+def calculate_coolest_zip(cleaned_results, my_zip):
+    """
+    Using the weather results by zip code, determines which nearby
+    zip code area has the coolest expected weather that day.
+    Parameters:
+    --Weather results by zip code [dict]
+    --User inputted zip code [string]
+    """
+
+    # Set initial coolest_zip and coolest_max_temp to user's zipcode
+    coolest_zip = my_zip
+    coolest_max_temp = cleaned_results[coolest_zip]["max_temp"]
+
+    # Compare each zipcode's max_temp with the previous, and store if coolest
+    for zip_code in cleaned_results:
+        print (cleaned_results.items())
+        print ("Comparing to", zip_code,
+               "(lat:", cleaned_results[zip_code]["lat"] , ", lon:",
+               cleaned_results[zip_code]["lon"],
+               ") where the max temperature today is",
+                cleaned_results[zip_code]["max_temp"], "...")
+        if cleaned_results[zip_code]["max_temp"] < coolest_max_temp:
+            coolest_zip = zip_code
+            coolest_max_temp = cleaned_results[zip_code]["max_temp"]
 
     print("Result found!")
 
-    return coolest_zip, cleaned_results
+    return coolest_zip
 
 
 def write_to_file(weather_results_by_zip, filename = "response.json"):
