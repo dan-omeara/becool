@@ -28,21 +28,24 @@ def main():
     """
     while True:
         zip_code = input("Enter your zip code: ")
-        nearby_zips, zip_code = get_local_zips(zip_code, RADIUS)
-        print("There are " + str(len(nearby_zips))
+        nearby_locs, zip_code = get_local_zips(zip_code, RADIUS)
+        
+        print(nearby_locs)
+        
+        print("There are " + str(len(nearby_locs.keys()))
               + " zip codes within a " + str(RADIUS) + " mile radius.")
         input("Press any key to continue.")
         
-        weather_results = get_weather(nearby_zips)
+        # weather_results = get_weather(nearby_zips)
 
-        cleaned_results = clean_results(weather_results)
+        # cleaned_results = clean_results(weather_results)
 
-        # Used for debugging API responses
-        # write_to_file(weather_results, filename = str(time.time()))
+        # # Used for debugging API responses
+        # # write_to_file(weather_results, filename = str(time.time()))
 
-        coolest_zip = calculate_coolest_zip(cleaned_results, zip_code)
-        display_results(cleaned_results, zip_code, coolest_zip)
-        print("")
+        # coolest_zip = calculate_coolest_zip(cleaned_results, zip_code)
+        # display_results(cleaned_results, zip_code, coolest_zip)
+        # print("")
 
 
 def get_lat_long(weather_results):
@@ -55,6 +58,28 @@ def get_lat_long(weather_results):
     
 
 
+# def get_local_zips(zip_code, radius):
+#     """
+#     Gets a list of local locations surrounding the given zip_code, within the given radius.
+#     Uses the pyzipcode package.
+#     For errors in input or unknown zip codes (note that not all 5-digit numbers 
+#     have been assigned as zip codes), the function defaults to San Francisco (94101).
+#     Returns:
+#     --Local zip codes [list]
+#     --User-inputted zip code, changing it to 94101 if it is not found [integer]
+#     """
+#     zcdb = ZipCodeDatabase()
+#     local_zips = []
+#     try:
+#         local_zips = [z.zip for z in zcdb.get_zipcodes_around_radius(zip_code, radius)]
+#     except KeyError:
+#         print("Cannot find zip code. Defaulting to San Francisco (94101).")
+#         zip_code = "94101"
+#         local_zips = [z.zip for z in zcdb.get_zipcodes_around_radius(zip_code, radius)]
+
+#     return local_zips, zip_code
+
+
 def get_local_zips(zip_code, radius):
     """
     Gets a list of local locations surrounding the given zip_code, within the given radius.
@@ -62,7 +87,8 @@ def get_local_zips(zip_code, radius):
     For errors in input or unknown zip codes (note that not all 5-digit numbers 
     have been assigned as zip codes), the function defaults to San Francisco (94101).
     Returns:
-    --Local zip codes [list]
+    --Dictionary of nearby locations, organized by zip code
+    with nested dictionary corresponding city, state, lat, and lon [nested dict]
     --User-inputted zip code, changing it to 94101 if it is not found [integer]
     """
     zcdb = ZipCodeDatabase()
@@ -74,11 +100,21 @@ def get_local_zips(zip_code, radius):
         zip_code = "94101"
         local_zips = [z.zip for z in zcdb.get_zipcodes_around_radius(zip_code, radius)]
 
-    return local_zips, zip_code
+    nearby_locs = {}
+    for z in local_zips:
+        nearby_locs[z] = {
+            "city": zcdb[z].city,
+            "state": zcdb[z].state,
+            "longitude": zcdb[z].longitude,
+            "latitude": zcdb[z].latitude,
+        }
+
+    return nearby_locs, zip_code
 
 
-def get_weather(nearby_zips):
+def get_weather_old(nearby_zips):
     """
+    --DEPRECATED---
     Uses WeatherAPI to gets weather for each zip code provided.
     Parameters: 
     --Nearby zip codes [list]
@@ -116,6 +152,7 @@ def get_weather(nearby_zips):
         weather_results_by_zip.update({zip_code: response.json()})
 
     return weather_results_by_zip
+
 
 def clean_results(weather_results_by_zip):
     """
@@ -162,6 +199,47 @@ def clean_results(weather_results_by_zip):
         return cleaned_results
 
 
+def get_weather():
+    """
+    Uses Open-Meteo to gets weather for each lat/lon provided.
+    Parameters: 
+    --Nearby zip codes [list]
+    Returns a dictionary where the keys are zip codes and the 
+    values are weather results in JSON format [string]
+    """
+    # Display initial status messages
+    print("")
+    print ("Finding weather...")
+    print("(This may take up to a minute.) \n")
+
+    # Attempt to not get cached answers
+    h = {
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache"
+    }
+
+    # Query API
+    weather_results_by_zip = {}
+    for zip_code in nearby_zips:
+        params = {
+            "q": zip_code,
+            "days" : "1",
+            "key": API_KEY,
+        }
+        try:
+            response = requests.get(API_BASE_URL, params, timeout = 10, headers = h)
+        except requests.exceptions.RequestException as e: 
+            raise SystemExit(e)
+
+
+        # For debugging API responses
+        # write_to_file(response.json(), filename=(zip_code + ".json"))
+
+        weather_results_by_zip.update({zip_code: response.json()})
+
+    return weather_results_by_zip
+
+
 def calculate_coolest_zip(cleaned_results, my_zip):
     """
     Using the weather results by zip code, determines which nearby
@@ -177,7 +255,6 @@ def calculate_coolest_zip(cleaned_results, my_zip):
 
     # Compare each zipcode's max_temp with the previous, and store if coolest
     for zip_code in cleaned_results:
-        print (cleaned_results.items())
         print ("Comparing to", zip_code,
                "(lat:", cleaned_results[zip_code]["lat"] , ", lon:",
                cleaned_results[zip_code]["lon"],
