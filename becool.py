@@ -5,22 +5,19 @@ Author: Dan O'Meara
 Weather app to determine coolest place in local area.
 Best suited for microclimates.
 """
-DEFAULT_ZIP_DATA = {"94101": {"city": "San Francisco",
-                              "lat": 37.77,
-                              "lng": -122.41,
-                              }}
 
-# Used for debugging API responses
-import time 
-
+import time # Used for debugging API responses / testing cache feature
 from uszipcode import SearchEngine
 import openmeteo_requests
 import requests_cache
 from retry_requests import retry
 
+
 API_BASE_URL = "https://api.open-meteo.com/v1/forecast"
-# API_BASE_URL = "http://api.weatherapi.com/v1/forecast.json"
-# API_KEY = constants.API_KEY
+DEFAULT_ZIP_DATA = {"94101": {"city": "San Francisco",
+                              "lat": 37.77,
+                              "lng": -122.41,
+                              }}
 RADIUS = 10 # miles
 
 def main():
@@ -30,17 +27,17 @@ def main():
     """
     while True:
         zip_code = input("Enter your zip code: ")
-        
+
         loc_data, zip_code = get_zip_basics(zip_code)
-        
+
         nearby_locs = get_local_zips(loc_data[zip_code]["lat"], loc_data[zip_code]["lng"], RADIUS)
-        
+
         print("There are " + str(len(nearby_locs.keys()))
               + " zip codes within a " + str(RADIUS) + " mile radius.")
         input("Press any key to continue.")
-        
+
         weather_results = get_weather(nearby_locs)
-        
+
         # Used for debugging API responses
         # write_to_file(weather_results, filename = str(time.time()))
 
@@ -57,16 +54,18 @@ def get_zip_basics(zip_code):
     have been assigned as zip codes), the function defaults to San Francisco (94101).
     Returns:
     --Nested dictionary with zip code as key, with 
-    corresponding city, state, lat, and lon [nested dict]
+    corresponding city, state, latitude, and longitude [nested dict]
     """
     zip_data = {}
-    
+
+    # Setup uszipcode package search feature
     search = SearchEngine()
     z = search.by_zipcode(zip_code)
-    if bool(z) == False: # if zipcode not in database
+
+    if bool(z) is False: # if zipcode not in database
         print ("Zipcode not found.")
-        print ("Defaulting to 94901.")
-        zip_code = "94901"
+        print ("Defaulting to 94101.")
+        zip_code = "94101"
         zip_data = DEFAULT_ZIP_DATA
     else:
         zip_data[z.zipcode] = {
@@ -80,7 +79,22 @@ def get_zip_basics(zip_code):
 
 def get_local_zips(lat, lng, rad):
     """
-    Gets a list of all zip codes in a given radius
+    Gets a list of all zip codes in a given radius, and
+    returns related information about each of them
+
+    Parameters:
+    --Latitude [float]
+    --Longitude [float]
+    --Radius in miles [int/float]
+    Returns:
+    Nested dictionary in the form
+    {"94901": 
+        {
+            "city" : San Francisco
+            "lat" : 37.763
+            "lng" : -122.412
+        }
+    }
     """
     nearby_locs = {}
 
@@ -88,8 +102,8 @@ def get_local_zips(lat, lng, rad):
     result = search.by_coordinates(lat, lng, radius=rad, returns=None)
     for z in result:
 
-        nearby_locs[z.zipcode]={
-            "city": z.major_city,
+        nearby_locs[z.zipcode]={ # Outer dict key ex: "94101"
+            "city": z.major_city, 
             "lat": z.lat,
             "lng": z.lng,
         }
@@ -97,23 +111,22 @@ def get_local_zips(lat, lng, rad):
     return nearby_locs
 
 
-    # try:
-    #     zcdb[zip_code]
-    # except (KeyError):
-    #     print("Cannot find zip code. Defaulting to San Francisco (94102).")
-    #     zip_code = "94102"
-
-    # local_zips = [z.zip for z in zcdb.get_zipcodes_around_radius(zip_code, radius)]
-
-    # return local_zips, zip_code
-
-
 def get_lat_long_params(nearby_locs):
     """
-    Generates three lists:
-    --zip codes
-    --latitudes
-    --longitudes
+    Separates nested dictionary into three ordered lists of
+    zip codes, latitudes, and longitudes. Each are in the same 
+    corresponding order.
+
+    This is necessary for Open-Meteo API usage through
+    the bulk request feature.
+
+    Parameter:
+    --Nearby locations nested dictionary [nested dict]
+
+    Returns:
+    --zip codes [list]
+    --latitudes [list]
+    --longitudes [list]
     """
     zip_codes = []
     latitudes = []
@@ -124,16 +137,13 @@ def get_lat_long_params(nearby_locs):
         latitudes.append(nearby_locs[zip_code]["lat"])
         longitudes.append(nearby_locs[zip_code]["lng"])
 
-    print ("zip codes =", zip_codes)
-    print ("latitudes =", latitudes)
-    print ("longitudes =", longitudes)
-
     return zip_codes, latitudes, longitudes
 
 
 def get_weather(nearby_locs):
     """
     Uses Open-Meteo to gets weather for each lat/lon provided.
+    
     Parameters: 
     --Nearby locations nested dictionary, with zip codes as keys, and 
     other location information (lat/long) as internal keys within nested
@@ -145,6 +155,7 @@ def get_weather(nearby_locs):
         "lat": ...
         }
     }
+    
     Returns a dictionary where the keys are zip codes and the 
     values are weather results in JSON format [string]
     """
@@ -173,16 +184,16 @@ def get_weather(nearby_locs):
         "forecast_days": 1
     }
 
-    responses = openmeteo.weather_api(API_BASE_URL, params=params)    
+    responses = openmeteo.weather_api(API_BASE_URL, params=params)
 
     # Process each location
-    for i in range(len(responses)):
+    for i, response in enumerate(responses):
         print ("Zipcode:", zip_codes[i])
         zip_code = zip_codes[i]
         city = nearby_locs[zip_code]["city"]
         print ("City:", city)
 
-        response = responses[i]
+        # response = responses[i]
         print(f"Latitude: {response.Latitude()}")
         print(f"Longitude: {response.Longitude()}")
 
@@ -200,7 +211,7 @@ def get_weather(nearby_locs):
 
         print("Daily max temp: ", max_temp)
         print("---")
-        
+
         weather_results[zip_code] = {
             "city": city,
             "lat": response.Latitude(),
@@ -208,6 +219,41 @@ def get_weather(nearby_locs):
             "curr_temp": current_temperature_2m,
             "max_temp": max_temp
         }
+
+
+    # # Process each location
+    # for i in range(len(responses)):
+    #     print ("Zipcode:", zip_codes[i])
+    #     zip_code = zip_codes[i]
+    #     city = nearby_locs[zip_code]["city"]
+    #     print ("City:", city)
+
+    #     response = responses[i]
+    #     print(f"Latitude: {response.Latitude()}")
+    #     print(f"Longitude: {response.Longitude()}")
+
+    #     # Current values. The order of variables needs to be the same as requested.
+    #     current = response.Current()
+    #     current_temperature_2m = current.Variables(0).Value()
+
+    #     # print(f"Current time {current.Time()}")
+    #     print(f"Current temperature_2m {current_temperature_2m}")
+
+    #     # Process daily data. The order of variables needs to be the same as requested.
+    #     daily = response.Daily()
+    #     daily_temperature_2m_max = daily.Variables(0).ValuesAsNumpy()
+    #     max_temp = float(daily_temperature_2m_max[0])
+
+    #     print("Daily max temp: ", max_temp)
+    #     print("---")
+
+    #     weather_results[zip_code] = {
+    #         "city": city,
+    #         "lat": response.Latitude(),
+    #         "lng": response.Longitude(),
+    #         "curr_temp": current_temperature_2m,
+    #         "max_temp": max_temp
+    #     }
 
     return weather_results
 
