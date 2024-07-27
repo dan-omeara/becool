@@ -156,8 +156,8 @@ def get_weather(nearby_locs):
         }
     }
     
-    Returns a dictionary where the keys are zip codes and the 
-    values are weather results in JSON format [string]
+    Returns a nested dictionary with the same format, with added 
+    weather elements as keys in the inner dictionary [dict]
     """
     # Initialize dictionary
     weather_results = {}
@@ -188,7 +188,6 @@ def get_weather(nearby_locs):
 
     # Process each location
     for i, response in enumerate(responses):
-        print ("Zipcode:", zip_codes[i])
         zip_code = zip_codes[i]
         city = nearby_locs[zip_code]["city"]
 
