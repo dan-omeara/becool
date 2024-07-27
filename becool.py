@@ -191,27 +191,19 @@ def get_weather(nearby_locs):
         print ("Zipcode:", zip_codes[i])
         zip_code = zip_codes[i]
         city = nearby_locs[zip_code]["city"]
-        print ("City:", city)
-
-        # response = responses[i]
-        print(f"Latitude: {response.Latitude()}")
-        print(f"Longitude: {response.Longitude()}")
 
         # Current values. The order of variables needs to be the same as requested.
         current = response.Current()
         current_temperature_2m = current.Variables(0).Value()
 
         # print(f"Current time {current.Time()}")
-        print(f"Current temperature_2m {current_temperature_2m}")
 
         # Process daily data. The order of variables needs to be the same as requested.
         daily = response.Daily()
         daily_temperature_2m_max = daily.Variables(0).ValuesAsNumpy()
         max_temp = float(daily_temperature_2m_max[0])
 
-        print("Daily max temp: ", max_temp)
-        print("---")
-
+        # Compile weather results in nested dictionary
         weather_results[zip_code] = {
             "city": city,
             "lat": response.Latitude(),
@@ -221,40 +213,6 @@ def get_weather(nearby_locs):
         }
 
 
-    # # Process each location
-    # for i in range(len(responses)):
-    #     print ("Zipcode:", zip_codes[i])
-    #     zip_code = zip_codes[i]
-    #     city = nearby_locs[zip_code]["city"]
-    #     print ("City:", city)
-
-    #     response = responses[i]
-    #     print(f"Latitude: {response.Latitude()}")
-    #     print(f"Longitude: {response.Longitude()}")
-
-    #     # Current values. The order of variables needs to be the same as requested.
-    #     current = response.Current()
-    #     current_temperature_2m = current.Variables(0).Value()
-
-    #     # print(f"Current time {current.Time()}")
-    #     print(f"Current temperature_2m {current_temperature_2m}")
-
-    #     # Process daily data. The order of variables needs to be the same as requested.
-    #     daily = response.Daily()
-    #     daily_temperature_2m_max = daily.Variables(0).ValuesAsNumpy()
-    #     max_temp = float(daily_temperature_2m_max[0])
-
-    #     print("Daily max temp: ", max_temp)
-    #     print("---")
-
-    #     weather_results[zip_code] = {
-    #         "city": city,
-    #         "lat": response.Latitude(),
-    #         "lng": response.Longitude(),
-    #         "curr_temp": current_temperature_2m,
-    #         "max_temp": max_temp
-    #     }
-
     return weather_results
 
 
@@ -262,9 +220,13 @@ def calculate_coolest_zip(weather_results, my_zip):
     """
     Using the weather results by zip code, determines which nearby
     zip code area has the coolest expected weather that day.
+    
     Parameters:
     --Weather results by zip code [dict]
     --User inputted zip code [string]
+    
+    Return:
+    --Coolest zip code [string]
     """
 
     # Set initial coolest_zip and coolest_max_temp to user's zipcode
@@ -273,9 +235,12 @@ def calculate_coolest_zip(weather_results, my_zip):
 
     # Compare each zipcode's max_temp with the previous, and store if coolest
     for zip_code in weather_results:
+
+        # Display process message
         print ("Comparing to", zip_code,
                "where the max temperature today is",
                 round(weather_results[zip_code]["max_temp"], 1), "...")
+
         if weather_results[zip_code]["max_temp"] < coolest_max_temp:
             coolest_zip = zip_code
             coolest_max_temp = weather_results[zip_code]["max_temp"]
